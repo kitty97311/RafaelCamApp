@@ -19,6 +19,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -48,8 +49,10 @@ class CameraActivity : ComponentActivity() {
     private lateinit var monitorButton: ImageButton
     private lateinit var deviceButton: ImageButton
     private lateinit var timeText: TextView
+    private lateinit var flashButton: ImageButton
     private lateinit var handler: Handler
     private var elapsedTime: Int = 0
+    private lateinit var camera: Camera // Add this to hold the Camera instance
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,14 +93,29 @@ class CameraActivity : ComponentActivity() {
         monitorButton.setOnClickListener {
             monitorButton.isActivated = !monitorButton.isActivated
         }
+        flashButton = findViewById(R.id.flashButton)
+        flashButton.setOnClickListener {
+            flashButton.isActivated = !flashButton.isActivated
+            toggleTorch() // Add this to toggle the torch
+        }
         deviceButton = findViewById<ImageButton>(R.id.deviceButton)
         setupDeviceButton();
+    }
+
+    private fun toggleTorch() {
+        if (camera.cameraInfo.hasFlashUnit()) {
+            val isTorchOn = camera.cameraInfo.torchState.value == androidx.camera.core.TorchState.ON
+            camera.cameraControl.enableTorch(!isTorchOn)
+            flashButton.isActivated = !isTorchOn // Update the button UI based on torch state
+        } else {
+            Toast.makeText(this, "Flash is not available on this device", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private val updateTimeRunnable = object : Runnable {
         override fun run() {
             if (isRecording) {
-                elapsedTime ++
+                elapsedTime++
                 val seconds = elapsedTime % 60
                 val minutes = elapsedTime / 60
                 timeText.text = String.format("%02d:%02d", minutes, seconds)
@@ -248,9 +266,9 @@ class CameraActivity : ComponentActivity() {
                 cameraProvider.unbindAll()
 
                 // Bind the camera to the lifecycle
-                cameraProvider.bindToLifecycle(
+                camera = cameraProvider.bindToLifecycle(
                     this, cameraSelector, preview, videoCapture
-                )
+                ) // Save the Camera instance
 
             } catch (e: Exception) {
                 e.printStackTrace()

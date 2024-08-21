@@ -7,6 +7,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
@@ -40,7 +41,6 @@ import java.util.concurrent.Executors
 class CameraActivity : ComponentActivity() {
 
     private lateinit var cameraExecutor: ExecutorService
-    private lateinit var audioRecord: AudioRecord
     private lateinit var visualizerView: VisualizerView
     private var isRecording: Boolean = false
     private lateinit var videoCapture: VideoCapture<Recorder>
@@ -52,7 +52,10 @@ class CameraActivity : ComponentActivity() {
     private lateinit var flashButton: ImageButton
     private lateinit var handler: Handler
     private var elapsedTime: Int = 0
-    private lateinit var camera: Camera // Add this to hold the Camera instance
+    private lateinit var camera: Camera
+    private lateinit var audioTrack: AudioTrack
+
+    private lateinit var audioRecord: AudioRecord
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -294,12 +297,6 @@ class CameraActivity : ComponentActivity() {
             AudioFormat.ENCODING_PCM_16BIT
         )
 
-        // Create a file to save the video
-        val videoFile = File(getOutputDirectory(), "${System.currentTimeMillis()}.mp4")
-
-        // Set up the FileOutputOptions
-        val outputOptions = FileOutputOptions.Builder(videoFile).build()
-
         // Initialize AudioRecord
         if (ActivityCompat.checkSelfPermission(
                 this,
@@ -309,9 +306,16 @@ class CameraActivity : ComponentActivity() {
             return
         }
 
+        // Create a file to save the video
+        val videoFile = File(getOutputDirectory(), "${System.currentTimeMillis()}.mp4")
+
+        // Set up the FileOutputOptions
+        val outputOptions = FileOutputOptions.Builder(videoFile).build()
+
         // Start recording the video
         currentRecording = videoCapture.output
             .prepareRecording(this, outputOptions)
+            .withAudioEnabled()
             .start(ContextCompat.getMainExecutor(this)) { recordEvent ->
                 when (recordEvent) {
                     is VideoRecordEvent.Start -> {
@@ -338,17 +342,33 @@ class CameraActivity : ComponentActivity() {
             bufferSize
         )
 
+        // Initialize AudioTrack
+        audioTrack = AudioTrack(
+            AudioManager.STREAM_MUSIC,
+            sampleRate,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            bufferSize,
+            AudioTrack.MODE_STREAM
+        )
+
         // Start recording audio
         audioRecord.startRecording()
+        audioTrack.play()
 
-        // Start a thread to continuously read audio data and update the visualizer
         Thread {
-            val audioBuffer = ShortArray(bufferSize)
+            val simulatedAudioBuffer = ShortArray(bufferSize)
             while (isRecording && monitorButton.isActivated) {
-                val readSize = audioRecord.read(audioBuffer, 0, audioBuffer.size)
+
+                val readSize = audioRecord.read(simulatedAudioBuffer, 0, simulatedAudioBuffer.size)
+                audioTrack.write(simulatedAudioBuffer, 0, bufferSize)
 
                 // Convert the audio buffer to a list of amplitude values
-                val amplitudes = audioBuffer.take(readSize).map { it.toFloat() }
+                val amplitudes = simulatedAudioBuffer.take(bufferSize).map {
+                    it.toFloat()
+                }
+                Log.e("a", "${amplitudes.size}")
+                Log.e("a", "${amplitudes[100]}")
 
                 // Update the visualizer view with the amplitudes
                 runOnUiThread {
@@ -368,10 +388,9 @@ class CameraActivity : ComponentActivity() {
         // Stop updating the timeText
         elapsedTime = 0
         handler.removeCallbacks(updateTimeRunnable)
-        // Stop audio recording
-        audioRecord.stop()
-        audioRecord.release()
 
+        audioTrack.stop()
+        audioTrack.release()
         // Stop video recording
         currentRecording?.stop()
         currentRecording = null

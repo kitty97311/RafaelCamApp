@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.androidx.camera.camera2)  // Ensure this is added
     implementation(libs.androidx.camera.lifecycle) // Ensure this is added
     implementation(libs.androidx.camera.view)     // Ensure this is added
+    implementation("com.arthenica:mobile-ffmpeg-full:4.4.LTS")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

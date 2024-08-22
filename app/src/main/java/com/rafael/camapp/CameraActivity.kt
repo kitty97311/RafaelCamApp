@@ -1,6 +1,7 @@
 package com.rafael.camapp
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
@@ -34,13 +35,20 @@ import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.core.app.ActivityCompat
+import com.arthenica.mobileffmpeg.Config
+import com.arthenica.mobileffmpeg.ExecuteCallback
+import com.arthenica.mobileffmpeg.FFmpeg
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class CameraActivity : ComponentActivity() {
 
     private lateinit var cameraExecutor: ExecutorService
+    private lateinit var audioRecord: AudioRecord
+    private lateinit var audioTrack: AudioTrack
+    private lateinit var recordedFile: String
     private lateinit var visualizerView: VisualizerView
     private var isRecording: Boolean = false
     private lateinit var videoCapture: VideoCapture<Recorder>
@@ -53,9 +61,6 @@ class CameraActivity : ComponentActivity() {
     private lateinit var handler: Handler
     private var elapsedTime: Int = 0
     private lateinit var camera: Camera
-    private lateinit var audioTrack: AudioTrack
-
-    private lateinit var audioRecord: AudioRecord
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,7 +99,11 @@ class CameraActivity : ComponentActivity() {
         monitorButton = findViewById<ImageButton>(R.id.monitorButton)
         monitorButton.isActivated = true
         monitorButton.setOnClickListener {
-            monitorButton.isActivated = !monitorButton.isActivated
+            if (isRecording) {
+                Toast.makeText(this, "You can't change monitoring while recording", Toast.LENGTH_SHORT).show()
+            } else {
+                monitorButton.isActivated = !monitorButton.isActivated
+            }
         }
         flashButton = findViewById(R.id.flashButton)
         flashButton.setOnClickListener {
@@ -297,6 +306,12 @@ class CameraActivity : ComponentActivity() {
             AudioFormat.ENCODING_PCM_16BIT
         )
 
+        // Create a file to save the video
+        recordedFile = "${getOutputDirectory()}/${System.currentTimeMillis()}"
+
+        // Set up the FileOutputOptions
+        val videoOutputOption = FileOutputOptions.Builder(File("${recordedFile}.mp4")).build()
+
         // Initialize AudioRecord
         if (ActivityCompat.checkSelfPermission(
                 this,
@@ -306,16 +321,9 @@ class CameraActivity : ComponentActivity() {
             return
         }
 
-        // Create a file to save the video
-        val videoFile = File(getOutputDirectory(), "${System.currentTimeMillis()}.mp4")
-
-        // Set up the FileOutputOptions
-        val outputOptions = FileOutputOptions.Builder(videoFile).build()
-
         // Start recording the video
         currentRecording = videoCapture.output
-            .prepareRecording(this, outputOptions)
-            .withAudioEnabled()
+            .prepareRecording(this, videoOutputOption)
             .start(ContextCompat.getMainExecutor(this)) { recordEvent ->
                 when (recordEvent) {
                     is VideoRecordEvent.Start -> {
@@ -324,11 +332,10 @@ class CameraActivity : ComponentActivity() {
                     is VideoRecordEvent.Finalize -> {
                         if (!recordEvent.hasError()) {
                             // Video was saved successfully
-                            Toast.makeText(this, "Recorded video file saved successfully!", Toast.LENGTH_SHORT).show()
+                            Log.e("Video save", "success");
                         } else {
                             // Handle error
-                            Log.e("File saving error", "${recordEvent.error}")
-                            Toast.makeText(this, "Recorded video file save failed!", Toast.LENGTH_SHORT).show()
+                            Log.e("Video save", "${recordEvent.error}")
                         }
                     }
                 }
@@ -356,29 +363,63 @@ class CameraActivity : ComponentActivity() {
         audioRecord.startRecording()
         audioTrack.play()
 
+        // Start a thread to continuously read audio data and update the visualizer
         Thread {
-            val simulatedAudioBuffer = ShortArray(bufferSize)
-            while (isRecording && monitorButton.isActivated) {
+            val audioBuffer = ByteArray(bufferSize)
+            FileOutputStream(File("${recordedFile}.pcm")).use { fos ->
+                while (isRecording && monitorButton.isActivated) {
+                    val readSize = audioRecord.read(audioBuffer, 0, audioBuffer.size)
+                    if (readSize > 0) {
+                        fos.write(audioBuffer, 0, readSize)
+                    }
 
-                val readSize = audioRecord.read(simulatedAudioBuffer, 0, simulatedAudioBuffer.size)
-                audioTrack.write(simulatedAudioBuffer, 0, bufferSize)
+                    audioTrack.write(audioBuffer, 0, bufferSize)
+                    // Convert the audio buffer to a list of amplitude values
+                    val amplitudes = audioBuffer.take(readSize).map { it.toFloat() }
 
-                // Convert the audio buffer to a list of amplitude values
-                val amplitudes = simulatedAudioBuffer.take(bufferSize).map {
-                    it.toFloat()
-                }
-                Log.e("a", "${amplitudes.size}")
-                Log.e("a", "${amplitudes[100]}")
-
-                // Update the visualizer view with the amplitudes
-                runOnUiThread {
-                    visualizerView.updateAmplitudes(amplitudes)
+                    // Update the visualizer view with the amplitudes
+                    runOnUiThread {
+                        visualizerView.updateAmplitudes(amplitudes)
+                    }
                 }
             }
         }.start()
 
         // Start updating the timeText
         handler.post(updateTimeRunnable)
+    }
+
+    private fun mergeVideoAndAudio(mp4FilePath: String, pcmFilePath: String, outputFilePath: String) {
+        val sampleRate = 44100  // Make sure this matches your PCM file
+        val channels = 1  // 1 for mono, 2 for stereo
+
+        // FFmpeg command to combine PCM and MP4
+        val ffmpegCommand = arrayOf(
+            "-y",  // Overwrite output file if it exists
+            "-f", "s16le",  // PCM format: 16-bit signed little-endian
+            "-ar", sampleRate.toString(),  // Audio sample rate
+            "-ac", channels.toString(),  // Number of audio channels
+            "-i", pcmFilePath,  // Input PCM file
+            "-i", mp4FilePath,  // Input MP4 file
+            "-c:v", "copy",  // Copy video codec (no re-encoding)
+            "-c:a", "aac",  // Audio codec (AAC)
+            "-strict", "experimental",  // Allow experimental codecs
+            outputFilePath  // Output file path
+        )
+
+        // Execute FFmpeg command
+        FFmpeg.executeAsync(ffmpegCommand, ExecuteCallback { executionId, returnCode ->
+            if (returnCode == 0) {
+                Log.d("Combine", "Successfully combined PCM and MP4 into $outputFilePath")
+                Toast.makeText(this, "Recorded video file saved successfully!", Toast.LENGTH_SHORT).show()
+            } else {
+                // Failure
+                Log.e("Combine", "Failed to combine PCM and MP4. Return code: $returnCode")
+                Toast.makeText(this, "Recorded video file save failed!", Toast.LENGTH_SHORT).show()
+            }
+            File("${recordedFile}.mp4").delete()
+            File("${recordedFile}.pcm").delete()
+        })
     }
 
     private fun stopRecording() {
@@ -388,12 +429,44 @@ class CameraActivity : ComponentActivity() {
         // Stop updating the timeText
         elapsedTime = 0
         handler.removeCallbacks(updateTimeRunnable)
-
+        // Stop audio recording
+        audioRecord.stop()
+        audioRecord.release()
         audioTrack.stop()
         audioTrack.release()
         // Stop video recording
         currentRecording?.stop()
         currentRecording = null
+
+        showSaveDialog(this)
+    }
+
+    private fun showSaveDialog(context: Context) {
+        // Create the AlertDialog.Builder
+        val builder = AlertDialog.Builder(context)
+
+        // Set the title and message
+        builder.setTitle("Save Changes")
+        builder.setMessage("Do you want to save the changes?")
+
+        // Set up the "Save" button
+        builder.setPositiveButton("Save") { dialog, which ->
+            // Handle the save action
+            mergeVideoAndAudio("${recordedFile}.mp4", "${recordedFile}.pcm", "${recordedFile}_saved.mp4")
+            dialog.dismiss()
+        }
+
+        // Set up the "Cancel" button
+        builder.setNegativeButton("Cancel") { dialog, which ->
+            // Handle the cancel action
+            File("${recordedFile}.mp4").delete()
+            File("${recordedFile}.pcm").delete()
+            dialog.dismiss()
+        }
+
+        // Create and show the dialog
+        val dialog = builder.create()
+        dialog.show()
     }
 
     override fun onDestroy() {

@@ -38,10 +38,13 @@ import androidx.core.app.ActivityCompat
 import com.arthenica.mobileffmpeg.Config
 import com.arthenica.mobileffmpeg.ExecuteCallback
 import com.arthenica.mobileffmpeg.FFmpeg
+import com.rafael.camapp.ui.AmplifierView
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.abs
+import kotlin.math.min
 
 class CameraActivity : ComponentActivity() {
 
@@ -49,7 +52,8 @@ class CameraActivity : ComponentActivity() {
     private lateinit var audioRecord: AudioRecord
     private lateinit var audioTrack: AudioTrack
     private lateinit var recordedFile: String
-    private lateinit var visualizerView: VisualizerView
+//    private lateinit var visualizerView: VisualizerView
+    private lateinit var amplifierView: AmplifierView
     private var isRecording: Boolean = false
     private lateinit var videoCapture: VideoCapture<Recorder>
     private var currentRecording: Recording? = null
@@ -66,7 +70,8 @@ class CameraActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camera)
 
-        visualizerView = findViewById(R.id.soundVisualizer)
+//        visualizerView = findViewById(R.id.soundVisualizer)
+        amplifierView = findViewById(R.id.soundAmplifier)
 
         // Request the necessary permissions
         requestPermissionLauncher.launch(
@@ -375,11 +380,12 @@ class CameraActivity : ComponentActivity() {
 
                     audioTrack.write(audioBuffer, 0, bufferSize)
                     // Convert the audio buffer to a list of amplitude values
-                    val amplitudes = audioBuffer.take(readSize).map { it.toFloat() }
-
+//                    val amplitudes = audioBuffer.take(readSize).map { it.toFloat() }
+                    val amplitude = calculateAmplitude(audioBuffer, readSize)
                     // Update the visualizer view with the amplitudes
                     runOnUiThread {
-                        visualizerView.updateAmplitudes(amplitudes)
+//                        visualizerView.updateAmplitudes(amplitudes)
+                        amplifierView.updateStrength(amplitude)
                     }
                 }
             }
@@ -387,6 +393,17 @@ class CameraActivity : ComponentActivity() {
 
         // Start updating the timeText
         handler.post(updateTimeRunnable)
+    }
+
+    private fun calculateAmplitude(buffer: ByteArray, readSize: Int): Float {
+        var sum = 0f
+        for (i in 0 until readSize step 2) {
+            val value = (buffer[i].toInt() or (buffer[i + 1].toInt() shl 8)).toShort()
+            sum += abs(value.toFloat())
+        }
+        val amplitude = sum / (readSize / 8)
+        // Normalize the amplitude to be between 0.0 and 1.0
+        return min(amplitude / Short.MAX_VALUE, 1f)
     }
 
     private fun mergeVideoAndAudio(mp4FilePath: String, pcmFilePath: String, outputFilePath: String) {

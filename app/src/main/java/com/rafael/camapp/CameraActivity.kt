@@ -1,9 +1,15 @@
 package com.rafael.camapp
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -58,13 +64,20 @@ class CameraActivity : ComponentActivity() {
     private lateinit var videoCapture: VideoCapture<Recorder>
     private var currentRecording: Recording? = null
     private lateinit var recordButton: Button
-    private lateinit var monitorButton: ImageButton
-    private lateinit var deviceButton: ImageButton
+    private lateinit var monitorButton: Button
+    private lateinit var inputButton: Button
+    private lateinit var outputButton: Button
     private lateinit var timeText: TextView
     private lateinit var flashButton: ImageButton
     private lateinit var handler: Handler
     private var elapsedTime: Int = 0
     private lateinit var camera: Camera
+    private lateinit var audioManager: AudioManager
+    private var bluetoothAdapter: BluetoothAdapter? = null
+    private var inputDevices: Array<AudioDeviceInfo>? = null
+    private var outputDevices: Array<AudioDeviceInfo>? = null
+    private var curInputDeviceNum = 0
+    private var curOutputDeviceNum = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +85,11 @@ class CameraActivity : ComponentActivity() {
 
 //        visualizerView = findViewById(R.id.soundVisualizer)
         amplifierView = findViewById(R.id.soundAmplifier)
+
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        bluetoothAdapter = getBluetoothAdapter(this)
+        inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+        outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
 
         // Request the necessary permissions
         requestPermissionLauncher.launch(
@@ -101,7 +119,7 @@ class CameraActivity : ComponentActivity() {
                 startRecording()
             }
         }
-        monitorButton = findViewById<ImageButton>(R.id.monitorButton)
+        monitorButton = findViewById(R.id.monitorButton)
         monitorButton.isActivated = true
         monitorButton.setOnClickListener {
             if (isRecording) {
@@ -115,8 +133,34 @@ class CameraActivity : ComponentActivity() {
             flashButton.isActivated = !flashButton.isActivated
             toggleTorch() // Add this to toggle the torch
         }
-        deviceButton = findViewById<ImageButton>(R.id.deviceButton)
-        setupDeviceButton();
+        curInputDeviceNum = getAudioDevice(this, true)
+        curOutputDeviceNum = getAudioDevice(this, false)
+        inputButton = findViewById(R.id.inputButton)
+        outputButton = findViewById(R.id.outputButton)
+        when (curInputDeviceNum) {
+            1 -> inputButton.isActivated = true
+            2 -> inputButton.isSelected = true
+        }
+        when (curOutputDeviceNum) {
+            1 -> outputButton.isActivated = true
+            2 -> outputButton.isSelected = true
+        }
+        inputButton.setOnClickListener {
+            setAudioDevices(this, true, ++ curInputDeviceNum % 2)
+        }
+        outputButton.setOnClickListener {
+            setAudioDevices(this, false, ++ curOutputDeviceNum % 3)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        Log.e("Orientation", if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) "Portrait" else "Landscape")
+    }
+
+    private fun getBluetoothAdapter(context: Context): BluetoothAdapter? {
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        return bluetoothManager.adapter
     }
 
     private fun toggleTorch() {
@@ -141,111 +185,130 @@ class CameraActivity : ComponentActivity() {
         }
     }
 
-    private fun setupDeviceButton() {
-        var curDeviceType = getHeadsetType(this)
-        when (curDeviceType) {
-            "Speaker" -> {
-                deviceButton.isActivated = false
-                deviceButton.isSelected = false
-            }
-            "Wired" -> {
-                deviceButton.isActivated = true
-                deviceButton.isSelected = false
-                deviceButton.setOnClickListener {
-                    deviceButton.isActivated = !deviceButton.isActivated
-                    switchAudioOutput(this, if (deviceButton.isSelected) "Wired" else "Speaker")
-                }
-            }
-            "Bluetooth" -> {
-                deviceButton.isActivated = false
-                deviceButton.isSelected = true
-                deviceButton.setOnClickListener {
-                    deviceButton.isSelected = !deviceButton.isSelected
-                    switchAudioOutput(this, if (deviceButton.isSelected) "Bluetooth" else "Speaker")
-                }
-            }
-        }
-    }
-
-    private fun switchAudioOutput(context: Context, deviceType: String) {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-        when (deviceType) {
-            "Speaker" -> {
-                audioManager.isSpeakerphoneOn = true
-                audioManager.isBluetoothScoOn = false
-                audioManager.isWiredHeadsetOn = false
-            }
-            "Wired" -> {
-                // No need to force audio routing; this usually happens automatically.
-                audioManager.isSpeakerphoneOn = false
-                audioManager.isBluetoothScoOn = false
-            }
-            "Bluetooth" -> {
-                if (audioManager.isBluetoothA2dpOn) {
+    fun setAudioDevices(context: Context, isInput: Boolean, device: Int) {
+        if (inputDevices == null && isInput) return
+        else if (outputDevices == null && !isInput) return
+        when (device) {
+            2 -> {
+                if (isInput) {
+                    inputButton.isActivated = false
+                    inputButton.isSelected = true
                     audioManager.startBluetoothSco()
                     audioManager.isBluetoothScoOn = true
+                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                 } else {
-                    // Handle case where Bluetooth is not available or not connected
-                    audioManager.isSpeakerphoneOn = true
+                    outputButton.isActivated = false
+                    outputButton.isSelected = true
+                    audioManager.startBluetoothSco()
+                    audioManager.isBluetoothScoOn = true
+                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+//                    bluetoothAdapter?.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
+//                        @SuppressLint("MissingPermission")
+//                        override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+//                            if (profile == BluetoothProfile.HEADSET) {
+//                                val bluetoothHeadset = proxy as BluetoothHeadset
+//                                val connectedDevices = bluetoothHeadset.connectedDevices
+//
+//                                if (connectedDevices.isNotEmpty()) {
+//                                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+//                                    audioManager.isBluetoothScoOn = true
+//                                    audioManager.startBluetoothSco()
+//                                }
+//                            }
+//                        }
+//                        override fun onServiceDisconnected(profile: Int) {
+//                            // Handle disconnection
+//                        }
+//                    }, BluetoothProfile.HEADSET)
                 }
             }
-            else -> {
-                // Default to speaker
-                audioManager.isSpeakerphoneOn = true
+            1 -> {
+                if (isInput) {
+                    inputButton.isActivated = true
+                    inputButton.isSelected = false
+                } else {
+                    outputButton.isActivated = true
+                    outputButton.isSelected = false
+                }
+                audioManager.stopBluetoothSco()
                 audioManager.isBluetoothScoOn = false
+                audioManager.isSpeakerphoneOn = false
+                audioManager.mode = AudioManager.MODE_NORMAL
+            }
+            0 -> {
+                if (isInput) {
+                    inputButton.isActivated = false
+                    inputButton.isSelected = false
+                } else {
+                    outputButton.isActivated = false
+                    outputButton.isSelected = false
+                }
+                audioManager.stopBluetoothSco()
+                audioManager.isBluetoothScoOn = false
+                audioManager.isSpeakerphoneOn = true
+                audioManager.mode = AudioManager.MODE_NORMAL
             }
         }
     }
 
-    private fun isHeadsetConnected(context: Context): Boolean {
+    fun getAudioDevice(context: Context, isInput: Boolean): Int {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        if (isInput) {
+            val devices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
             for (device in devices) {
-                if (device.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
-                    return true
+                when (device.type) {
+                    AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> {
+                        return 2
+                    }
+                    AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                    AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> {
+                        return 1
+                    }
+                    AudioDeviceInfo.TYPE_BUILTIN_MIC -> {
+                        return 0
+                    }
+                    else -> {
+                        return 3
+                    }
                 }
             }
         } else {
-            // For older Android versions
-            return audioManager.isWiredHeadsetOn || audioManager.isBluetoothA2dpOn
-        }
-        return false
-    }
-
-    fun getHeadsetType(context: Context): String {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             for (device in devices) {
                 when (device.type) {
-                    AudioDeviceInfo.TYPE_WIRED_HEADSET,
-                    AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> return "Wired"
                     AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-                    AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> return "Bluetooth"
+                    AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
+                        return 2
+                    }
+                    AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                    AudioDeviceInfo.TYPE_WIRED_HEADSET -> {
+                        return 1
+                    }
+                    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> {
+                        return 0
+                    }
+                    else -> {
+                        // Other types of output devices can be handled here
+                        return 3
+                    }
                 }
             }
-        } else {
-            // For older Android versions
-            if (audioManager.isWiredHeadsetOn) {
-                return "Wired"
-            } else if (audioManager.isBluetoothA2dpOn) {
-                return "Bluetooth"
-            }
         }
-        return "Speaker"
+        return -1
     }
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             if (permissions[Manifest.permission.CAMERA] == true &&
                 permissions[Manifest.permission.RECORD_AUDIO] == true &&
+                permissions[Manifest.permission.MODIFY_AUDIO_SETTINGS] == true &&
                 permissions[Manifest.permission.WRITE_EXTERNAL_STORAGE] == true &&
+                permissions[Manifest.permission.READ_EXTERNAL_STORAGE] == true &&
                 permissions[Manifest.permission.MANAGE_EXTERNAL_STORAGE] == true &&
-                permissions[Manifest.permission.MODIFY_AUDIO_SETTINGS] == true
+                permissions[Manifest.permission.BLUETOOTH] == true &&
+                permissions[Manifest.permission.BLUETOOTH_CONNECT] == true &&
+                permissions[Manifest.permission.BLUETOOTH_ADMIN] == true
             ) {
                 // Permissions granted, start the camera
                 startCamera()

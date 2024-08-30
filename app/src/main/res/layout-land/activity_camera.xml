@@ -21,7 +21,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintVertical_bias="0.05"
+        app:layout_constraintVertical_bias="0.95"
         app:layout_constraintHorizontal_bias="0.05"
         android:background="@drawable/bg_flash"
         android:src="@drawable/flash_button"
@@ -35,7 +35,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintVertical_bias="0.05"
-        app:layout_constraintHorizontal_bias="0.95"
+        app:layout_constraintHorizontal_bias="0.05"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="00:00"
@@ -50,22 +50,22 @@
     <!--        android:layout_width="match_parent"-->
     <!--        android:layout_height="150dp"/>-->
 
-    <com.rafael.camapp.ui.AmplifierView
+    <com.rafael.camapp.ui.AmplifierViewLandscape
         android:id="@+id/soundAmplifier"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/recordButton"
-        app:layout_constraintVertical_bias="0.95"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/recordButton"
+        app:layout_constraintHorizontal_bias="0.95"
         android:background="@drawable/bg_strength_bar"
-        android:layout_width="match_parent"
-        android:layout_height="10dp"
-        android:layout_marginHorizontal="50dp"/>
+        android:layout_width="10dp"
+        android:layout_height="match_parent"
+        android:layout_marginVertical="50dp"/>
 
     <Button
         android:id="@+id/inputButton"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintHorizontal_bias="0.1"
+        app:layout_constraintVertical_bias="0.9"
         android:drawableTop="@drawable/input_button"
         android:drawableTint="@color/color_device"
         android:background="@null"
@@ -76,10 +76,10 @@
 
     <Button
         android:id="@+id/outputButton"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintHorizontal_bias="0.9"
+        app:layout_constraintVertical_bias="0.1"
         android:drawableTop="@drawable/output_button"
         android:drawableTint="@color/color_device"
         android:background="@null"
@@ -90,30 +90,30 @@
 
     <Button
         android:id="@+id/switchButton"
-        app:layout_constraintTop_toTopOf="@id/recordButton"
-        app:layout_constraintBottom_toBottomOf="@id/recordButton"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.3"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="@id/recordButton"
+        app:layout_constraintEnd_toEndOf="@id/recordButton"
+        app:layout_constraintVertical_bias="0.7"
         android:background="@drawable/ic_switch"
         android:layout_width="40dp"
         android:layout_height="40dp"/>
 
     <Button
         android:id="@+id/monitorButton"
-        app:layout_constraintTop_toTopOf="@id/recordButton"
-        app:layout_constraintBottom_toBottomOf="@id/recordButton"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.7"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="@id/recordButton"
+        app:layout_constraintEnd_toEndOf="@id/recordButton"
+        app:layout_constraintVertical_bias="0.3"
         android:background="@drawable/monitor_button"
         android:layout_width="40dp"
         android:layout_height="40dp"/>
 
     <Button
-        app:layout_constraintBottom_toTopOf="@id/inputButton"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/inputButton"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
         android:id="@+id/recordButton"
         android:layout_width="70dp"
         android:layout_height="70dp"

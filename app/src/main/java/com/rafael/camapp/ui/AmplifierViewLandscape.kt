@@ -11,29 +11,15 @@ import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
 
-open class AmplifierView @JvmOverloads constructor(
+class AmplifierViewLandscape @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-) : View(context, attrs, defStyleAttr) {
-
-    protected var strength: Float = 0f // Representing the current strength (0.0 to 1.0)
-
-    // Define the paint with a gradient shader
-    protected val paint = Paint().apply {
-        style = Paint.Style.FILL
-        isAntiAlias = true // Smooths the edges
-    }
-
-    // Method to update the strength value
-    fun updateStrength(newStrength: Float) {
-        strength = newStrength.coerceIn(0f, 1f) // Ensure strength is within [0, 1]
-        invalidate() // Triggers a redraw of the view
-    }
+) : AmplifierView(context, attrs, defStyleAttr) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
         // Calculate the width of the filled part of the bar based on the strength
-        val barWidth = width * strength
+        val barHeight = height * super.strength
 
         // Define padding and corner radius
         val padding = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 1.0f, context.resources.displayMetrics)
@@ -41,7 +27,7 @@ open class AmplifierView @JvmOverloads constructor(
 
         // Create a LinearGradient for the gradient effect
         val gradient = LinearGradient(
-            0f, 0f, width.toFloat(), 0f, // Start and end points for the gradient
+            0f, 0f, 0f, width.toFloat(), // Start and end points for the gradient
             Color.GREEN, // Start color (weak sound)
             Color.RED,   // End color (strong sound)
             Shader.TileMode.CLAMP
@@ -52,7 +38,7 @@ open class AmplifierView @JvmOverloads constructor(
 
         // Draw the rounded rectangle with the gradient
         canvas.drawRoundRect(
-            RectF(padding, padding, barWidth - padding, height.toFloat() - padding),
+            RectF(height.toFloat() - padding, padding, padding, barHeight - padding),
             roundRadius,
             roundRadius,
             paint

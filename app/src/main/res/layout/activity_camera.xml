@@ -50,6 +50,26 @@
     <!--        android:layout_width="match_parent"-->
     <!--        android:layout_height="150dp"/>-->
 
+    <Button
+        android:id="@+id/enlargeButton"
+        app:layout_constraintBottom_toTopOf="@id/soundAmplifier"
+        app:layout_constraintEnd_toEndOf="@id/soundAmplifier"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.75"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/ic_zoom_in"/>
+
+    <Button
+        android:id="@+id/shrinkButton"
+        app:layout_constraintBottom_toTopOf="@id/soundAmplifier"
+        app:layout_constraintEnd_toEndOf="@id/soundAmplifier"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.9"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/ic_zoom_out"/>
+
     <com.rafael.camapp.ui.AmplifierView
         android:id="@+id/soundAmplifier"
         app:layout_constraintTop_toTopOf="parent"

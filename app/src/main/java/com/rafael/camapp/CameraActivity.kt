@@ -69,7 +69,10 @@ class CameraActivity : ComponentActivity() {
     private lateinit var outputButton: Button
     private lateinit var timeText: TextView
     private lateinit var flashButton: ImageButton
+    private lateinit var switchButton: Button
     private lateinit var handler: Handler
+    private lateinit var enlargeButton: Button
+    private lateinit var shrinkButton: Button
     private var elapsedTime: Int = 0
     private lateinit var camera: Camera
     private lateinit var audioManager: AudioManager
@@ -78,6 +81,10 @@ class CameraActivity : ComponentActivity() {
     private var outputDevices: Array<AudioDeviceInfo>? = null
     private var curInputDeviceNum = 0
     private var curOutputDeviceNum = 0
+    private var lensFacing = CameraSelector.LENS_FACING_FRONT
+    private var curZoomRatio = 1f
+    private var minZoomRatio = 1f
+    private var maxZoomRatio = 1f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,6 +92,9 @@ class CameraActivity : ComponentActivity() {
 
 //        visualizerView = findViewById(R.id.soundVisualizer)
         amplifierView = findViewById(R.id.soundAmplifier)
+        switchButton = findViewById(R.id.switchButton)
+        enlargeButton = findViewById(R.id.enlargeButton)
+        shrinkButton = findViewById(R.id.shrinkButton)
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         bluetoothAdapter = getBluetoothAdapter(this)
@@ -110,6 +120,14 @@ class CameraActivity : ComponentActivity() {
         // Start the camera
         startCamera()
 
+        switchButton.setOnClickListener {
+            lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+                CameraSelector.LENS_FACING_FRONT
+            } else {
+                CameraSelector.LENS_FACING_BACK
+            }
+            startCamera() // Restart the camera with the new lens facing
+        }
         timeText = findViewById(R.id.timeText)
         recordButton = findViewById<Button>(R.id.recordButton)
         recordButton.setOnClickListener {
@@ -150,6 +168,36 @@ class CameraActivity : ComponentActivity() {
         }
         outputButton.setOnClickListener {
             setAudioDevices(this, false, ++ curOutputDeviceNum % 3)
+        }
+        enlargeButton.setOnClickListener {
+            zoom(true)
+        }
+        shrinkButton.setOnClickListener {
+            zoom(false)
+        }
+    }
+
+    private fun zoom(isEnlarge: Boolean) {
+        if (isEnlarge) {
+            camera?.let {
+                if (curZoomRatio < maxZoomRatio) {
+                    curZoomRatio += 0.5f
+                    if (curZoomRatio > maxZoomRatio) {
+                        curZoomRatio = maxZoomRatio
+                    }
+                    it.cameraControl.setZoomRatio(curZoomRatio)
+                }
+            }
+        } else {
+            camera?.let {
+                if (curZoomRatio > minZoomRatio) {
+                    curZoomRatio -= 0.5f
+                    if (curZoomRatio < minZoomRatio) {
+                        curZoomRatio = minZoomRatio
+                    }
+                    it.cameraControl.setZoomRatio(curZoomRatio)
+                }
+            }
         }
     }
 
@@ -319,6 +367,11 @@ class CameraActivity : ComponentActivity() {
         }
 
     private fun startCamera() {
+        lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+            CameraSelector.LENS_FACING_FRONT
+        } else {
+            CameraSelector.LENS_FACING_BACK
+        }
         val viewFinder = findViewById<PreviewView>(R.id.viewFinder)
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
@@ -338,18 +391,25 @@ class CameraActivity : ComponentActivity() {
                 .build()
             videoCapture = VideoCapture.withOutput(recorder)
 
-            // Select the back camera as the default
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
             try {
+                val cameraSelector = CameraSelector.Builder()
+                    .requireLensFacing(lensFacing)
+                    .build()
+
                 // Unbind all use cases before rebinding
                 cameraProvider.unbindAll()
-
                 // Bind the camera to the lifecycle
                 camera = cameraProvider.bindToLifecycle(
                     this, cameraSelector, preview, videoCapture
                 ) // Save the Camera instance
 
+                // Set up the SeekBar with the zoom limits
+                camera?.cameraInfo?.zoomState?.observe(this) { zoomState ->
+                    minZoomRatio = zoomState.minZoomRatio
+                    maxZoomRatio = zoomState.maxZoomRatio
+                    Log.e("min&max zoom:", "$minZoomRatio:$maxZoomRatio")
+                    curZoomRatio = zoomState.zoomRatio // Get current zoom ratio
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
